@@ -17,6 +17,8 @@ public:
 
     ecdsa();
 
+    static void lets_elap();
+
     static void find_elapidae();
     static const PrivateKey& gen_private();
     static PublicKey const& make_public( const PrivateKey& priv );

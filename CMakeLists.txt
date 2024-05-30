@@ -27,6 +27,8 @@ set(PROJECT_SOURCES
         ${V_HEADERS}
         ecdsa.cpp
         ecdsa.h
+        aes.cpp
+        aes.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

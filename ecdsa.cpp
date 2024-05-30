@@ -60,10 +60,13 @@ template<class> class TD;
 
 ecdsa::ecdsa()
 {
+    lets_elap();
+    return;
+
     find_elapidae();
+    return;
 
     CryptoPP::AutoSeededRandomPool prng;
-
     {
         ECDSA<ECP, SHA256>::PrivateKey k1;
         //k1.Initialize( prng, ASN1::secp256k1() );
@@ -123,6 +126,36 @@ ecdsa::ecdsa()
     std::cout << "Signature: " << signature << std::endl;
     std::cout << "Input 256 bits: " << duration.count() / 1000 << " microseconds" << std::endl << std::endl;
 
+}
+//=======================================================================================
+static string bin( CryptoPP::Integer ii )
+{
+    string res;
+    for ( int i = 0; i < ii.ByteCount(); ++i )
+        res.push_back( ii.GetByte(i) );
+    return res;
+}
+
+void ecdsa::lets_elap()
+{
+    auto elap_path = "/home/el/red/SOURCES/ELAP-ECDSA-KEYS/elap3d.der";
+    FileSource f( elap_path, true );
+    PrivateKey pk;
+    pk.Load( f );
+    vdeb << pk.GetAlgorithmID();
+    PublicKey pub;
+    pk.MakePublicKey(pub);
+
+    auto x = bin(pub.GetPublicElement().y);
+    for ( auto c: x )
+    {
+        vdeb.hex() << int(c) << "(" << c << ")";
+    }
+    auto y = bin(pub.GetPublicElement().y);
+    for ( auto c: y )
+    {
+        vdeb.hex() << int(c) << "(" << c << ")";
+    }
 }
 //=======================================================================================
 static std::string get_only_nick( std::string str )
