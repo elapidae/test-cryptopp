@@ -1,3 +1,9 @@
+/*
+https://github.com/bitcoin/libbase58/blob/master/base58.c
+https://en.bitcoin.it/wiki/Base58Check_encoding
+https://en.bitcoin.it/wiki/Wallet_import_format
+*/
+
 #include "ecdsa.h"
 
 #include "vlog.h"
@@ -8,9 +14,11 @@
 #include <cryptopp/eccrypto.h>
 #include <cryptopp/oids.h>
 #include <cryptopp/files.h>
-#include "vbyte_buffer.h"
+#include <cryptopp/ripemd.h>
 #include "vtime_meter.h"
 #include <set>
+#include "vcat.h"
+#include "libbase58.h"
 
 using namespace std;
 using namespace CryptoPP;
@@ -60,6 +68,12 @@ template<class> class TD;
 
 ecdsa::ecdsa()
 {
+    follow_priv_example();
+    return;
+
+    follow_example();
+    return;
+
     lets_elap();
     return;
 
@@ -140,22 +154,152 @@ void ecdsa::lets_elap()
 {
     auto elap_path = "/home/el/red/SOURCES/ELAP-ECDSA-KEYS/elap3d.der";
     FileSource f( elap_path, true );
-    PrivateKey pk;
-    pk.Load( f );
-    vdeb << pk.GetAlgorithmID();
-    PublicKey pub;
-    pk.MakePublicKey(pub);
+    PrivateKey priv;
+    priv.Load( f );
+    vdeb << priv.GetAlgorithmID();
+    PublicKey pub1, pub2;
+    priv.MakePublicKey(pub1);
 
-    auto x = bin(pub.GetPublicElement().y);
+    ECPPoint pt = pub1.GetPublicElement();
+    auto hex = hex_public(pub1);
+    vdeb << hex << hex.size();
+    return;
+
+    auto x = bin(pub1.GetPublicElement().y);
     for ( auto c: x )
     {
         vdeb.hex() << int(c) << "(" << c << ")";
     }
-    auto y = bin(pub.GetPublicElement().y);
+    auto y = bin(pub1.GetPublicElement().y);
     for ( auto c: y )
     {
         vdeb.hex() << int(c) << "(" << c << ")";
     }
+}
+/*
+https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
+*/
+void ecdsa::follow_example()
+{
+    AutoSeededRandomPool prng;
+
+    auto _priv_key = "18e14a7b6a307f426a94f8114701e7c8e774e7f9a47e2c2035db29a206321725h";
+    Integer _priv_exp( _priv_key );
+
+    //auto _priv0 = gen_private();
+    //auto _priv_key = from_hex( _priv_key_h );
+    PrivateKey priv_key;
+    //priv_key.Initialize( prng, ASN1::secp256k1() );
+    priv_key.AccessGroupParameters() = ASN1::secp256k1();
+    priv_key.SetPrivateExponent( _priv_exp );
+
+    if ( !priv_key.Validate(prng, 16) )
+        vwarning << "checking fail";
+
+    vdeb.hex() << _priv_exp << priv_key.GetAlgorithmID();
+
+    PublicKey pub_key;
+    priv_key.MakePublicKey(pub_key);
+
+    vdeb << hex << pub_key.GetPublicElement().x;
+    vdeb << int_to_hex( pub_key.GetPublicElement().x );
+
+    std::string y_even = pub_key.GetPublicElement().y.IsEven() ? "02" : "03";
+    auto xx = y_even + int_to_hex( pub_key.GetPublicElement().x );
+    auto xxtest = "0250863ad64a87ae8a2fe83c1af1a8403cb53f53e486d8511dad8a04887e5b2352";
+    assert(xx == xxtest);
+
+    auto shaxx = sha256_hex( vbyte_buffer::from_hex(xx) );
+    auto shaxxtest = "0b7c28c9b7290c98d7438e70b3d3f7c848fbd7d1dc194ff83f4f7cc9b1378e98";
+    assert( shaxx == shaxxtest );
+
+    auto ripemd160 = ripemd160_hex( vbyte_buffer::from_hex(shaxx) );
+    auto ripemdtest = "f54a5851e9372b87810a8e60cdd2e7cfd80b6e31";
+    assert( ripemd160 == ripemdtest );
+
+    auto main_network = "00";
+    ripemd160 = main_network + ripemd160;
+
+    auto sha2 = sha256_hex( vbyte_buffer::from_hex(ripemd160) );
+    auto sha2test = "ad3c854da227c7e99c4abfad4ea41d71311160df2e415e713318c70d67c6b41c";
+    assert( sha2 == sha2test );
+
+    auto sha3test = "c7f18fe8fcbed6396741e58ad259b5cb16b7fd7f041904147ba1dcffabf747fd";
+    auto sha3 = sha256_hex( vbyte_buffer::from_hex(sha2) );
+    assert( sha3 == sha3test );
+
+    auto checksum = vbyte_buffer::from_hex(sha3).left(4);
+    vdeb << vbyte_buffer(checksum).tohex() << "c7f18fe8";
+
+    auto addr = vbyte_buffer::from_hex(ripemd160) + checksum;
+    assert( addr == vbyte_buffer::from_hex("00f54a5851e9372b87810a8e60cdd2e7cfd80b6e31c7f18fe8") );
+
+    auto wallet = to_base58( addr );
+    vdeb << wallet << " 1PMycacnJaSqwwJqjawXBErnLsZ7RkXUAs";
+
+    follow_priv_example();
+}
+//=======================================================================================
+void ecdsa::follow_priv_example()
+{
+    vdeb << "========= priv =============";
+    AutoSeededRandomPool prng;
+
+    // 1. Take a private key. 0C28FCA386C7A227600B2FE50B7CAE11EC86D3BF1FBE471BE89827E19D72AA1D
+    string priv_exp_hex = "0C28FCA386C7A227600B2FE50B7CAE11EC86D3BF1FBE471BE89827E19D72AA1D";
+    auto priv_exp_bin = vbyte_buffer::from_hex(priv_exp_hex);
+
+    //2. Add a 0x80 byte in front of it for mainnet addresses or 0xef for testnet addresses. Also add a 0x01 byte at the end if the private key will correspond to a compressed public key.
+    auto prefix = string( true ? "80": "ef" );
+    auto s2_hex = prefix + priv_exp_hex;
+    auto s2_bin = vbyte_buffer::from_hex(s2_hex);
+
+    //3. Perform SHA-256 hash on the extended key.
+    string s3_test = "8147786C4D15106333BF278D71DADAF1079EF2D2440A4DDE37D747DED5403592";
+    s3_test = vbyte_buffer::from_hex(s3_test).tohex();
+    auto s3_hex = sha256_hex( s2_bin );
+    assert( s3_hex == s3_test );
+
+    //4. Perform SHA-256 hash on result of SHA-256 hash.
+    string s4_test = "507A5B8DFED0FC6FE8801743720CEDEC06AA5C6FCA72B07C49964492FB98A714";
+    s4_test = vbyte_buffer::from_hex(s4_test).tohex();
+    auto s4_hex = sha256_hex( vbyte_buffer::from_hex(s3_hex) );
+    assert( s4_hex == s4_test );
+
+    // 5. Take the first 4 bytes of the second SHA-256 hash; this is the checksum.
+    auto s5_sum = vbyte_buffer::from_hex(s4_hex).left(4);
+    vdeb << s5_sum.toHex() << "507A5B8D";
+
+    //6. Add the 4 checksum bytes from point 5 at the end of the extended key from point 2.
+    string s6_test = "800C28FCA386C7A227600B2FE50B7CAE11EC86D3BF1FBE471BE89827E19D72AA1D507A5B8D";
+    auto s6_bin = s2_bin + s5_sum;
+    assert( s6_bin == vbyte_buffer::from_hex(s6_test) );
+
+    // 7. Convert the result from a byte string into a base58 string using Base58Check encoding.
+    //    This is the wallet import format (WIF).
+    auto s7_test = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ";
+    auto s7_b58 = to_base58( s6_bin );
+    assert( s7_test == s7_b58 );
+
+    b58_sha256_impl = sha256_impl_for_b58;
+
+    auto ok =
+    //b58check( priv_exp_bin.data(), priv_exp_bin.size(), s7_b58.c_str(), s7_b58.size() );
+    b58check( s6_bin.data(), s6_bin.size(), s7_b58.c_str(), s7_b58.size() );
+    vdeb << "b58 check:" << ok;
+
+    std::string res; res.resize( priv_exp_bin.size() * 2 + 1 );
+    size_t sz = res.size();
+    auto encoded =
+    b58check_enc( res.data(), &sz, 0x80, priv_exp_bin.data(), priv_exp_bin.size() );
+    if (sz > 0) sz -= 1; // remove zero terminate
+    res.resize(sz);
+    vdeb << "encoded:" << encoded << res;
+    assert(res == s7_test);
+//    PrivateKey priv_key;
+//    priv_key.AccessGroupParameters() = ASN1::secp256k1();
+//    priv_key.SetPrivateExponent( _priv_k );
+
 }
 //=======================================================================================
 static std::string get_only_nick( std::string str )
@@ -250,38 +394,128 @@ string ecdsa::extract_text( const PublicKey& pub )
     return res;
 }
 //=======================================================================================
-
-static auto _text = []
+string ecdsa::hex_public( const PublicKey &pub )
 {
-    set<char> res;
-    for (auto c = '0'; c < '9'; ++c) res.insert( c );
-    for (auto c = 'A'; c < 'Z'; ++c) res.insert( c );
-    for (auto c = 'a'; c < 'z'; ++c) res.insert( c );
-    res.insert( '!' );
-    res.insert( '@' );
-    res.insert( '#' );
-    res.insert( '$' );
-    res.insert( '%' );
-    res.insert( '&' );
-    res.insert( '*' );
-    res.insert( '(' );
-    res.insert( ')' );
-    res.insert( '[' );
-    res.insert( ']' );
-    res.insert( '{' );
-    res.insert( '}' );
-    res.insert( '<' );
-    res.insert( '>' );
-    res.insert( '/' );
-    res.insert( '?' );
-    res.insert( '.' );
-    res.insert( ',' );
-    res.insert( ';' );
-    res.insert( ':' );
-    res.insert( '+' );
-    res.insert( '-' );
-    res.insert( '_' );
-    res.insert( '=' );
-    res.insert( '~' );
+    std::string res;
+    auto &x = pub.GetPublicElement().x;
+    auto &y = pub.GetPublicElement().y;
+
+    //x.Encode()
+    std::stringstream ss;
+    ss << std::hex << x << " " << y;
+    return ss.str();
+}
+//=======================================================================================
+string ecdsa::from_hex( std::string hex )
+{
+    string res;
+    CryptoPP::StringSource(hex, true,
+        new CryptoPP::HexDecoder(
+            new CryptoPP::StringSink(res)
+        ) //StringSink
+    ); //StringSource
     return res;
+
+    ByteQueue queue;
+    HexEncoder he;
+
+}
+//=======================================================================================
+vbyte_buffer ecdsa::int_to_hex( const CryptoPP::Integer &val )
+{
+//    vbyte_buffer res;
+//    for ( int i = 0; i < val.ByteCount(); ++i )
+//        res.append( val.GetByte(i) );
+//    return res.tohex();
+    stringstream ss;
+    ss << hex << val;
+    auto str = ss.str();
+    return str.substr(0, str.size() - 1);
+}
+
+
+//=======================================================================================
+string ecdsa::sha256_hex(std::string data)
+{
+    std::string digest;
+    CryptoPP::SHA256 hash;
+
+    CryptoPP::StringSource(data, true,
+        new CryptoPP::HashFilter
+        ( hash,
+            new CryptoPP::HexEncoder
+            (
+                new CryptoPP::StringSink(digest), false
+            )
+        )
+    );
+
+    return digest;
+}
+//=======================================================================================
+auto _sha256_bin_test_ = []()
+{
+    auto m1 = vbyte_buffer::from_hex(ecdsa::sha256_hex("1"));
+    auto m2 = ecdsa::sha256_bin("1");
+    if (m1 != m2) throw verror;
+    return 0;
 }();
+string ecdsa::sha256_bin(std::string data)
+{
+    std::string digest;
+    CryptoPP::SHA256 hash;
+
+    CryptoPP::StringSource(data, true,
+        new CryptoPP::HashFilter
+        ( hash, new CryptoPP::StringSink(digest), false )
+    );
+
+    return digest;
+}
+//=======================================================================================
+string ecdsa::ripemd160_hex( std::string data )
+{
+    std::string digest;
+    CryptoPP::RIPEMD160 hash;
+
+    CryptoPP::StringSource(data, true,
+        new CryptoPP::HashFilter
+        ( hash,
+            new CryptoPP::HexEncoder
+            (
+                new CryptoPP::StringSink(digest), false
+            )
+        )
+    );
+
+    return digest;
+}
+//=======================================================================================
+string ecdsa::to_base58( std::string data )
+{
+    std::string res;
+    res.resize( data.size() * 2 );
+    size_t out_size = res.size();
+    auto ok = b58enc( res.data(), &out_size, data.c_str(), data.size() );
+    if (!ok) throw verror;
+    res.resize( out_size - 1 ); // without zero
+    return res;
+}
+//=======================================================================================
+string ecdsa::from_base58(std::string data)
+{
+    throw verror;
+}
+//=======================================================================================
+
+//=======================================================================================
+extern "C" {
+    bool sha256_impl_for_b58(void *digest, const void *data, size_t datasz)
+    {
+        std::string d( static_cast<const char*>(data), datasz );
+        auto sha = ecdsa::sha256_bin(d);
+        std::copy( sha.begin(), sha.end(), static_cast<char*>(digest) );
+        return true;
+    }
+}
+//=======================================================================================

@@ -14,6 +14,8 @@
 #include <iostream>
 #include "vlog.h"
 #include "vbyte_buffer.h"
+#include <memory>
+
 
 using namespace CryptoPP;
 
@@ -71,19 +73,25 @@ std::string aes_cbc_mode_decrypt(std::string &encoded, CryptoPP::SecByteBlock ke
 class aes::pimpl
 {
 public:
+    using Encryption = CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption;
+    using Decryption = CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption;
+
     pimpl()
         : key( CryptoPP::AES::DEFAULT_KEYLENGTH )
     {
         AutoSeededRandomPool prng;
         prng.GenerateBlock( key, key.size() );
         prng.GenerateBlock( iv, sizeof(iv) );
+
+        e.reset( new Encryption(key, key.size(), iv) );
+        d.reset( new Decryption(key, key.size(), iv) );
     }
 
     SecByteBlock key;
     byte iv[AES::BLOCKSIZE];
 
-    //CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption e;
-    //CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption d;
+    std::unique_ptr<Encryption> e;
+    std::unique_ptr<Decryption> d;
 };
 //=======================================================================================
 aes::aes()
@@ -98,11 +106,11 @@ aes::~aes()
 //=======================================================================================
 std::string aes::encrypt( std::string msg )
 {
-    CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption e(p->key, p->key.size(), p->iv);
+    //CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption e(p->key, p->key.size(), p->iv);
     std::string cipher;
 
     CryptoPP::StringSource(msg, true,
-        new CryptoPP::StreamTransformationFilter(e,
+        new CryptoPP::StreamTransformationFilter(*p->e.get(),
             new CryptoPP::StringSink(cipher)
         ) //StreamTransformationFilter
     ); // StringSource
@@ -112,11 +120,11 @@ std::string aes::encrypt( std::string msg )
 //=======================================================================================
 std::string aes::decrypt( std::string cipher )
 {
-    CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption d(p->key, p->key.size(), p->iv);
+    //CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption d(p->key, p->key.size(), p->iv);
     std::string output;
 
     CryptoPP::StringSource(cipher, true,
-        new CryptoPP::StreamTransformationFilter(d,
+        new CryptoPP::StreamTransformationFilter(*p->d.get(),
             new CryptoPP::StringSink(output)
         ) //StreamTransformationFilter
     ); //StringSource

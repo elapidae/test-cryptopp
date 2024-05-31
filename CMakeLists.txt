@@ -56,7 +56,7 @@ endif()
 
 #target_link_libraries(${PROJECT_NAME} cryptopp-static)
 
-target_link_libraries(${PROJECT_NAME} cryptopp Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(${PROJECT_NAME} cryptopp base58 Qt${QT_VERSION_MAJOR}::Widgets)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com

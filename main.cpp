@@ -12,6 +12,8 @@ https://github.com/hieunguyen1053/cryptopp-example/blob/master/AES-CFB-mode.cpp
 #include <crypto++/aes.h>
 #include <crypto++/cryptlib.h>
 #include <crypto++/hex.h>
+#include <crypto++/base64.h>
+#include <crypto++/basecode.h>
 #include <crypto++/secblock.h>
 #include <crypto++/modes.h>
 #include <crypto++/aes.h>
@@ -36,21 +38,17 @@ static vbyte_buffer init( unsigned char * data, size_t size )
 
 int main(int argc, char *argv[])
 {
-//    ecdsa _; (void)_;
-//    return 0;
+    ecdsa _; (void)_;
+    return 0;
 
-    std::string msg5 = "Lorem ipsum dolor sit amet consectetur adipisicing elit. Enim, neque exercitationem? Et iusto veniam nostrum voluptatem dolor, maxime deleniti harum aperiam molestias animi quam assumenda ipsam repellat earum ab quae. Lorem ipsum dolor sit amet consectetur adipisicing elit. Enim, neque exercitationem? Et iusto veniam nostrum voluptatem dolor, maxime deleniti harum aperiam molestias animi quam assumenda ipsam repellat earum ab quae. Lorem ipsum dolor sit amet consectetur adipisicing elit. Enim, neque exerci";
-
+    std::string msg = "Lorem ipsum dor";
     aes es;
-    auto c = es.encrypt( msg5 );
-    vdeb << c.size();
-
-    auto d = es.decrypt( c );
-    vdeb << (msg5 == d);
-
-    auto c2 = es.encrypt( msg5 );
-    vdeb << (c == c2);
-
+    for ( int i = 0; i < 10; ++i)
+    {
+        auto c = es.encrypt( msg );
+        auto d = es.decrypt( c );
+        vdeb << vbyte_buffer(c).tohex() << "||" << d;
+    }
     return 0;
 //    QApplication a(argc, argv);
 //    MainWindow w;
